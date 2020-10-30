@@ -1,0 +1,37 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+
+\title{Report.0.investigate}
+\author{Phan Minh Duong}
+\date{October 2020}
+
+\begin{document}
+
+\maketitle
+
+\section{Compiling the project}
+\begin{verbatim}
+cd /storage/student3/advancedhpc2020/labwork/
+mkdir build
+cd build
+cmake ..
+make -j
+\end{verbatim}
+\section{What you need?}
+\begin{itemize}
+  \item OS: GNU/Linux or macOS. Windows is not supported
+  \item CUDA SDK 7+.
+  \item Compiler: nvcc (bundled with CUDA SDK) and gcc 4.8+ (for C++11 standard support).
+  \item libjpeg to encode/decode JPEG files.
+\end{itemize}
+\section{Output}
+\begin{verbatim}
+student3@ictserver2:/storage/student3/advancedhpc2020/labwork/build$ ./labwork 1 ../data/cloud.jpeg
+USTH ICT Master 2018, Advanced Programming for HPC.
+Warming up...
+Starting labwork 1
+labwork 1 CPU ellapsed 289.7ms
+labwork 1 ellapsed 5.7ms
+\end{verbatim}
+
+\end{document}
