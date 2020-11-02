@@ -15,7 +15,7 @@ public:
     void saveOutputImage(std::string outputFileName);
 
     void labwork1_CPU();
-    void labwork1_OpenMP();
+    void labwork1_OpenMP(int numThreads);
 
     void labwork2_GPU();
 

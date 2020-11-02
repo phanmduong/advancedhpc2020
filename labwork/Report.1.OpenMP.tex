@@ -1,0 +1,60 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+
+\title{Report.1.OpenMP}
+\author{Phan Minh Duong}
+\date{October 2020}
+
+\begin{document}
+
+\maketitle
+
+\section{How implement the conversion?}
+\begin{verbatim}
+void Labwork::labwork1_OpenMP() {
+    int pixelCount = inputImage->width * inputImage->height;
+    outputImage = static_cast<char *>(malloc(pixelCount * 3));
+    // do something here
+    #pragma omp parallel for
+    for (int j = 0; j < 100; j++) {     // let's do it 100 times, otherwise it's too fast!
+        for (int i = 0; i < pixelCount; i++) {
+            outputImage[i * 3] = (char) (((int) inputImage->buffer[i * 3] + (int) inputImage->buffer[i * 3 + 1] +
+                                          (int) inputImage->buffer[i * 3 + 2]) / 3);
+            outputImage[i * 3 + 1] = outputImage[i * 3];
+            outputImage[i * 3 + 2] = outputImage[i * 3];
+        }
+    }
+}
+\end{verbatim}
+\section{What’s the speedup?}
+\begin{verbatim}
+Starting labwork 1
+labwork 1 CPU ellapsed 4214.7ms
+labwork 1 CPU OMP ellapsed 353.4ms
+labwork 1 ellapsed 489.6ms
+\end{verbatim}
+\section{Experimenting with different OpenMP parameters}
+\textbf{Team size}
+\begin{verbatim}
+labwork 1 CPU ellapsed 4057.8ms
+1: 3759.6ms
+2: 2182.3ms
+3: 1302.8ms
+4: 1040.9ms
+5: 820.4ms
+6: 745.2ms
+7: 658.2ms
+8: 582.8ms
+9: 530.4ms
+10: 581.9ms
+11: 533.3ms
+12: 558.2ms
+13: 518.6ms
+14: 401.9ms
+15: 372.2ms
+16: 369.7ms
+\end{verbatim}
+\begin{verbatim}
+\end{verbatim}
+
+\end{document}
