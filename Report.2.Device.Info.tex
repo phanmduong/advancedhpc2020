@@ -1,0 +1,66 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+
+\title{Report.1.OpenMP}
+\author{Phan Minh Duong}
+\date{November 2020}
+
+\begin{document}
+
+\maketitle
+
+\section{Source code}
+\begin{verbatim}
+void Labwork::labwork2_GPU() {
+    int nDevices = 0;
+    // get all devices
+    cudaGetDeviceCount(&nDevices);
+    printf("Number total of GPU : %d\n\n", nDevices);
+    for (int i = 0; i < nDevices; i++){
+        // get informations from individual device
+        cudaDeviceProp prop;
+        cudaGetDeviceProperties(&prop, i);
+        // something more here
+        printf("GPU name is %s\n",prop.name);
+        printf("GPU clock is %d\n",prop.clockRate);
+        printf("GPU multi processor count is %d\n",prop.multiProcessorCount);
+        printf("GPU core count is %d\n",getSPcores(prop));
+        printf("GPU Warp size is %d\n", prop.warpSize);
+        printf("------------------\n");
+        printf("GPU Memory clock rate is %d\n", prop.memoryClockRate);
+        printf("GPU Memory bus width: %d\n", prop.memoryBusWidth);
+        printf("------------------\n");
+        printf("\n");
+    }
+
+}
+\end{verbatim}
+\section{Result}
+\begin{verbatim}
+Starting labwork 2
+Number total of GPU : 2
+
+GPU name is Tesla K40c
+GPU clock is 745000
+GPU multi processor count is 15
+GPU core count is 2880
+GPU Warp size is 32
+------------------
+GPU Memory clock rate is 3004000
+GPU Memory bus width: 384
+------------------
+
+GPU name is GeForce GTX TITAN Black
+GPU clock is 980000
+GPU multi processor count is 15
+GPU core count is 2880
+GPU Warp size is 32
+------------------
+GPU Memory clock rate is 3500000
+GPU Memory bus width: 384
+------------------
+
+labwork 2 ellapsed 1.1ms
+\end{verbatim}
+
+\end{document}
