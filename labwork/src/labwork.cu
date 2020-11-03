@@ -47,7 +47,12 @@ int main(int argc, char **argv) {
             labwork.labwork2_GPU();
             break;
         case 3:
-            labwork.labwork3_GPU();
+            for (int i = 1; i < 64; i++){
+                timer.start();
+                labwork.labwork3_GPU(i);
+                printf("%d: %.1fms\n", i, timer.getElapsedTimeInMilliSec());
+            }
+            
             labwork.saveOutputImage("labwork3-gpu-out.jpg");
             break;
         case 4:
@@ -175,18 +180,57 @@ void Labwork::labwork2_GPU() {
 
 }
 
-void Labwork::labwork3_GPU() {
-    // Calculate number of pixels
+__global__ void grayscale(uchar3 *input, uchar3 *output) {
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    output[tid].x = (input[tid].x + input[tid].y +
+    input[tid].z) / 3;
+    output[tid].z = output[tid].y = output[tid].x;
+    }
 
-    // Allocate CUDA memory    
+void Labwork::labwork3_GPU(int blockSize) {
+    // Calculate number of pixels
+    int pixelCount = inputImage->width * inputImage->height;
+    outputImage = static_cast<char *>(malloc(pixelCount * 3));
+    uchar3 *hostInput = (uchar3 *) malloc(pixelCount * sizeof(uchar3));
+    uchar3 *hostGray = (uchar3 *) malloc(pixelCount * sizeof(uchar3));
+    
+    int numBlock = pixelCount / blockSize;
+
+    // Copy input image into uchar3
+    for (int i = 0; i < pixelCount; i++) {
+        hostInput[i].x = (unsigned char) inputImage->buffer[i * 3];
+        hostInput[i].y = (unsigned char) inputImage->buffer[i * 3 + 1];
+        hostInput[i].z = (unsigned char) inputImage->buffer[i * 3 + 2];
+    }
+    // Allocate CUDA memory  
+    uchar3 *devInput;
+    uchar3 *devGray;
+
+    cudaMalloc(&devInput, pixelCount * sizeof(uchar3));
+    cudaMalloc(&devGray, pixelCount * sizeof(uchar3));
 
     // Copy CUDA Memory from CPU to GPU
+    cudaMemcpy(devInput, hostInput,
+    pixelCount * sizeof(uchar3),
+    cudaMemcpyHostToDevice);
 
     // Processing
+    grayscale<<<numBlock, blockSize>>>(devInput, devGray);
 
     // Copy CUDA Memory from GPU to CPU
+    cudaMemcpy(hostGray, devGray,
+        pixelCount * sizeof(uchar3),
+        cudaMemcpyDeviceToHost);
 
     // Cleaning
+    cudaFree(devInput);
+
+    // Copy uchar3 into output image
+    for (int i = 0; i < pixelCount; i++) {
+        outputImage[i * 3] = (char) (hostGray[i].x);
+        outputImage[i * 3 + 1] = outputImage[i * 3];
+        outputImage[i * 3 + 2] = outputImage[i * 3];
+    }
 }
 
 void Labwork::labwork4_GPU() {

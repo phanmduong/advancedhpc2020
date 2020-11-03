@@ -19,7 +19,7 @@ public:
 
     void labwork2_GPU();
 
-    void labwork3_GPU();
+    void labwork3_GPU(int blockSize);
 
     void labwork4_GPU();
 
