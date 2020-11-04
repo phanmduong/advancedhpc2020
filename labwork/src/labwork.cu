@@ -56,7 +56,19 @@ int main(int argc, char **argv) {
             labwork.saveOutputImage("labwork3-gpu-out.jpg");
             break;
         case 4:
-            labwork.labwork4_GPU();
+            // timer.start();
+            // labwork.labwork3_GPU(3);
+            // printf("%d: %.1fms\n", 3, timer.getElapsedTimeInMilliSec());
+            // timer.start();
+            // labwork.labwork4_GPU(3);
+            // printf("%dx%d: %.1fms\n",3, 3, timer.getElapsedTimeInMilliSec());
+
+            for (int i = 1; i < 64; i++){
+                timer.start();
+                labwork.labwork4_GPU(i);
+                printf("%dx%d: %.1fms\n",i, i, timer.getElapsedTimeInMilliSec());
+            }
+ 
             labwork.saveOutputImage("labwork4-gpu-out.jpg");
             break;
         case 5:
@@ -233,7 +245,60 @@ void Labwork::labwork3_GPU(int blockSize) {
     }
 }
 
-void Labwork::labwork4_GPU() {
+__global__ void grayscale2(uchar3 *input, uchar3 *output) {
+    int x = threadIdx.x + blockIdx.x * blockDim.x;
+    int y = threadIdx.y + blockIdx.y * blockDim.y;
+    int w = blockDim.x * gridDim.x;
+    output[x + y*w].x = (input[x + y*w].x + input[x + y*w].y +
+    input[x + y*w].z) / 3;
+    output[x + y*w].z = output[x + y*w].y = output[x + y*w].x;
+}
+
+void Labwork::labwork4_GPU(int size) {
+    // Calculate number of pixels
+    int pixelCount = inputImage->width * inputImage->height;
+    outputImage = static_cast<char *>(malloc(pixelCount * 3));
+    uchar3 *hostInput = (uchar3 *) malloc(pixelCount * sizeof(uchar3));
+    uchar3 *hostGray = (uchar3 *) malloc(pixelCount * sizeof(uchar3));
+    
+    dim3 gridSize = dim3((int) (inputImage->width / size), (int) (inputImage->height/size));
+    dim3 blockSize = dim3(size, size);
+
+    // Copy input image into uchar3
+    for (int i = 0; i < pixelCount; i++) {
+        hostInput[i].x = (unsigned char) inputImage->buffer[i * 3];
+        hostInput[i].y = (unsigned char) inputImage->buffer[i * 3 + 1];
+        hostInput[i].z = (unsigned char) inputImage->buffer[i * 3 + 2];
+    }
+    // Allocate CUDA memory  
+    uchar3 *devInput;
+    uchar3 *devGray;
+
+    cudaMalloc(&devInput, pixelCount * sizeof(uchar3));
+    cudaMalloc(&devGray, pixelCount * sizeof(uchar3));
+
+    // Copy CUDA Memory from CPU to GPU
+    cudaMemcpy(devInput, hostInput,
+    pixelCount * sizeof(uchar3),
+    cudaMemcpyHostToDevice);
+
+    // Processing
+    grayscale2<<<gridSize, blockSize>>>(devInput, devGray);
+
+    // Copy CUDA Memory from GPU to CPU
+    cudaMemcpy(hostGray, devGray,
+        pixelCount * sizeof(uchar3),
+        cudaMemcpyDeviceToHost);
+
+    // Cleaning
+    cudaFree(devInput);
+
+    // Copy uchar3 into output image
+    for (int i = 0; i < pixelCount; i++) {
+        outputImage[i * 3] = (char) (hostGray[i].x);
+        outputImage[i * 3 + 1] = outputImage[i * 3];
+        outputImage[i * 3 + 2] = outputImage[i * 3];
+    }
 }
 
 void Labwork::labwork5_CPU() {
