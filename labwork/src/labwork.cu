@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
             // labwork.labwork4_GPU(3);
             // printf("%dx%d: %.1fms\n",3, 3, timer.getElapsedTimeInMilliSec());
 
-            for (int i = 1; i < 64; i++){
+            for (int i = 1; i < 16; i++){
                 timer.start();
                 labwork.labwork4_GPU(i);
                 printf("%dx%d: %.1fms\n",i, i, timer.getElapsedTimeInMilliSec());
@@ -245,10 +245,10 @@ void Labwork::labwork3_GPU(int blockSize) {
     }
 }
 
-__global__ void grayscale2(uchar3 *input, uchar3 *output) {
+__global__ void grayscale2(uchar3 *input, uchar3 *output, int w, int h) {
     int x = threadIdx.x + blockIdx.x * blockDim.x;
     int y = threadIdx.y + blockIdx.y * blockDim.y;
-    int w = blockDim.x * gridDim.x;
+    if (y >= h ||  x >= w) return;
     output[x + y*w].x = (input[x + y*w].x + input[x + y*w].y +
     input[x + y*w].z) / 3;
     output[x + y*w].z = output[x + y*w].y = output[x + y*w].x;
@@ -261,7 +261,7 @@ void Labwork::labwork4_GPU(int size) {
     uchar3 *hostInput = (uchar3 *) malloc(pixelCount * sizeof(uchar3));
     uchar3 *hostGray = (uchar3 *) malloc(pixelCount * sizeof(uchar3));
     
-    dim3 gridSize = dim3((int) (inputImage->width / size), (int) (inputImage->height/size));
+    dim3 gridSize = dim3(inputImage->width / size + 1, inputImage->height/size + 1);
     dim3 blockSize = dim3(size, size);
 
     // Copy input image into uchar3
@@ -283,7 +283,7 @@ void Labwork::labwork4_GPU(int size) {
     cudaMemcpyHostToDevice);
 
     // Processing
-    grayscale2<<<gridSize, blockSize>>>(devInput, devGray);
+    grayscale2<<<gridSize, blockSize>>>(devInput, devGray, inputImage->width,inputImage->height);
 
     // Copy CUDA Memory from GPU to CPU
     cudaMemcpy(hostGray, devGray,
