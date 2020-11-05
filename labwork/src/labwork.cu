@@ -445,7 +445,8 @@ void Labwork::labwork5_GPU(bool shared) {
 }
 
 __device__ void map_binarization(uchar3 *input, uchar3 *output, int threshold){
-    (*output).x = (*output).y = (*output).z = (*input).x > threshold ? 255 : 0;
+    (*output).x = ((*input).x  + (*input).y + (*input).z) / 3 > threshold ? 255 : 0;
+    (*output).y = (*output).z = (*output).x;
 }
 
 __global__ void binarization(uchar3 *input, uchar3 *output, int w, int h, int threshold) {
