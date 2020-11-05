@@ -115,10 +115,10 @@ void Labwork::saveOutputImage(std::string outputFileName) {
 
 void Labwork::labwork1_CPU() {
     int pixelCount = inputImage->width * inputImage->height;
-    outputImage = static_cast<char *>(malloc(pixelCount * 3));
+    outputImage = static_cast<unsigned char *>(malloc(pixelCount * 3));
     for (int j = 0; j < 100; j++) {     // let's do it 100 times, otherwise it's too fast!
         for (int i = 0; i < pixelCount; i++) {
-            outputImage[i * 3] = (char) (((int) inputImage->buffer[i * 3] + (int) inputImage->buffer[i * 3 + 1] +
+            outputImage[i * 3] = (unsigned char) (((int) inputImage->buffer[i * 3] + (int) inputImage->buffer[i * 3 + 1] +
                                           (int) inputImage->buffer[i * 3 + 2]) / 3);
             outputImage[i * 3 + 1] = outputImage[i * 3];
             outputImage[i * 3 + 2] = outputImage[i * 3];
@@ -128,13 +128,13 @@ void Labwork::labwork1_CPU() {
 
 void Labwork::labwork1_OpenMP(int numThreads) {
     int pixelCount = inputImage->width * inputImage->height;
-    outputImage = static_cast<char *>(malloc(pixelCount * 3));
+    outputImage = static_cast<unsigned char *>(malloc(pixelCount * 3));
     omp_set_num_threads(numThreads);
     // do something here
     #pragma omp parallel for
     for (int j = 0; j < 100; j++) {     // let's do it 100 times, otherwise it's too fast!
         for (int i = 0; i < pixelCount; i++) {
-            outputImage[i * 3] = (char) (((int) inputImage->buffer[i * 3] + (int) inputImage->buffer[i * 3 + 1] +
+            outputImage[i * 3] = (unsigned char) (((int) inputImage->buffer[i * 3] + (int) inputImage->buffer[i * 3 + 1] +
                                           (int) inputImage->buffer[i * 3 + 2]) / 3);
             outputImage[i * 3 + 1] = outputImage[i * 3];
             outputImage[i * 3 + 2] = outputImage[i * 3];
@@ -202,7 +202,7 @@ __global__ void grayscale(uchar3 *input, uchar3 *output) {
 void Labwork::labwork3_GPU(int blockSize) {
     // Calculate number of pixels
     int pixelCount = inputImage->width * inputImage->height;
-    outputImage = static_cast<char *>(malloc(pixelCount * 3));
+    outputImage = static_cast<unsigned char *>(malloc(pixelCount * 3));
     uchar3 *hostInput = (uchar3 *) malloc(pixelCount * sizeof(uchar3));
     uchar3 *hostGray = (uchar3 *) malloc(pixelCount * sizeof(uchar3));
     
@@ -239,7 +239,7 @@ void Labwork::labwork3_GPU(int blockSize) {
 
     // Copy uchar3 into output image
     for (int i = 0; i < pixelCount; i++) {
-        outputImage[i * 3] = (char) (hostGray[i].x);
+        outputImage[i * 3] = (unsigned char) (hostGray[i].x);
         outputImage[i * 3 + 1] = outputImage[i * 3];
         outputImage[i * 3 + 2] = outputImage[i * 3];
     }
@@ -257,7 +257,7 @@ __global__ void grayscale2(uchar3 *input, uchar3 *output, int w, int h) {
 void Labwork::labwork4_GPU(int size) {
     // Calculate number of pixels
     int pixelCount = inputImage->width * inputImage->height;
-    outputImage = static_cast<char *>(malloc(pixelCount * 3));
+    outputImage = static_cast<unsigned char *>(malloc(pixelCount * 3));
     uchar3 *hostInput = (uchar3 *) malloc(pixelCount * sizeof(uchar3));
     uchar3 *hostGray = (uchar3 *) malloc(pixelCount * sizeof(uchar3));
     
@@ -295,13 +295,43 @@ void Labwork::labwork4_GPU(int size) {
 
     // Copy uchar3 into output image
     for (int i = 0; i < pixelCount; i++) {
-        outputImage[i * 3] = (char) (hostGray[i].x);
+        outputImage[i * 3] = (unsigned char) (hostGray[i].x);
         outputImage[i * 3 + 1] = outputImage[i * 3];
         outputImage[i * 3 + 2] = outputImage[i * 3];
     }
 }
 
 void Labwork::labwork5_CPU() {
+    float filter []={
+        0,0,1,2,1,0,0,0,
+        3,13,22,13,3,0,
+        1,13,59,97,59,13,1,
+        2,22,97,159,97,22,2,
+        1,13,59,97,59,13,1,
+        3,13,22,13,3,0,
+        0,0,1,2,1,0,0,0,
+    };
+    labwork1_CPU();
+    unsigned char * grayImage = outputImage;
+    int pixelCount = inputImage->width * inputImage->height;
+    outputImage = static_cast<unsigned char *>(malloc(pixelCount * 3));
+    memset(outputImage, 0, pixelCount*3);
+    int w = inputImage->width;
+    int h = inputImage->height;
+    for (int row = 3; row < h-3; row++){
+        for (int col = 3; col < w-3; col++){
+            int sum = 0;
+            for (int j = -3; j<=3;j++){
+                for (int i = -3; i<=3;i++){
+                    sum += grayImage[((row+j)*w + col + i)*3] * filter[(j+3)*7 + i +3];
+                }
+            }
+            sum /= 1003;
+            outputImage[(row*w +col)*3] = sum;
+            outputImage[(row*w +col)*3 + 1] = sum;
+            outputImage[(row*w +col)*3 + 2] = sum;
+        }
+    }
 }
 
 void Labwork::labwork5_GPU(bool shared) {
