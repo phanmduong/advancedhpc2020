@@ -78,8 +78,12 @@ int main(int argc, char **argv) {
             labwork.saveOutputImage("labwork5-gpu-out.jpg");
             break;
         case 6:
-            labwork.labwork6_GPU();
-            labwork.saveOutputImage("labwork6-gpu-out.jpg");
+            labwork.labwork6a_GPU();
+            labwork.saveOutputImage("labwork6a-gpu-out.jpg");
+            labwork.labwork6b_GPU();
+            labwork.saveOutputImage("labwork6b-gpu-out.jpg");
+            labwork.labwork6c_GPU();
+            labwork.saveOutputImage("labwork6c-gpu-out.jpg");
             break;
         case 7:
             labwork.labwork7_GPU();
@@ -361,6 +365,36 @@ __global__ void blur_gpu(uchar3 *input, uchar3 *output, int w, int h) {
     output[x + y*w].z = output[x + y*w].y = output[x + y*w].x = sum;
 }
 
+__global__ void blur_gpu_shared(uchar3 *input, uchar3 *output, int w, int h) {
+    // __shared__ char tile[BLOCK_SIZE][BLOCK_SIZE];
+    // int x = threadIdx.x + blockIdx.x * blockDim.x;
+    // int y = threadIdx.y + blockIdx.y * blockDim.y;
+    // tile[threadIdx.x][threadIdx.y] = input[x + y*w].x;
+    // __syncthreads()
+
+    // if (y >= h ||  x >= w) return;
+
+    // float filter []={
+    //     0,0,1,2,1,0,0,0,
+    //     3,13,22,13,3,0,
+    //     1,13,59,97,59,13,1,
+    //     2,22,97,159,97,22,2,
+    //     1,13,59,97,59,13,1,
+    //     3,13,22,13,3,0,
+    //     0,0,1,2,1,0,0,0,
+    // };
+
+    // int sum = 0;
+    // for (int j = -3; j<=3;j++){
+    //     for (int i = -3; i<=3;i++){
+    //         sum += input[((y+j)*w + x + i)].x * filter[(j+3)*7 + i +3];
+    //     }
+    // }
+    // sum /= 1003;
+
+    // output[x + y*w].z = output[x + y*w].y = output[x + y*w].x = sum;
+}
+
 void Labwork::labwork5_GPU(bool shared) {
     int size = 7;
     labwork4_GPU(size);
@@ -387,7 +421,12 @@ void Labwork::labwork5_GPU(bool shared) {
     cudaMemcpyHostToDevice);
 
     // Processing
-    blur_gpu<<<gridSize, blockSize>>>(devInput, devGray, inputImage->width,inputImage->height);
+
+    if (shared){
+        blur_gpu_shared<<<gridSize, blockSize>>>(devInput, devGray, inputImage->width,inputImage->height);
+    } else {
+        blur_gpu<<<gridSize, blockSize>>>(devInput, devGray, inputImage->width,inputImage->height);
+    }
 
     // Copy CUDA Memory from GPU to CPU
     cudaMemcpy(hostGray, devGray,
@@ -405,8 +444,201 @@ void Labwork::labwork5_GPU(bool shared) {
     }
 }
 
-void Labwork::labwork6_GPU() {
+__device__ void map_binarization(uchar3 *input, uchar3 *output, int threshold){
+    (*output).x = (*output).y = (*output).z = (*input).x > threshold ? 255 : 0;
 }
+
+__global__ void binarization(uchar3 *input, uchar3 *output, int w, int h, int threshold) {
+    int x = threadIdx.x + blockIdx.x * blockDim.x;
+    int y = threadIdx.y + blockIdx.y * blockDim.y;
+    if (y >= h ||  x >= w) return;
+
+    map_binarization(&input[x + y*w], &output[x + y*w], threshold);
+}
+
+__device__ int truncate(int value)
+{
+    if(value < 0) return 0;
+    if(value > 255) return 255;
+
+    return value;
+}
+
+__device__ void map_brightness(uchar3 *input, uchar3 *output, int value){
+    (*output).x = (unsigned char) truncate((*input).x + value);
+    (*output).y = (unsigned char) truncate((*input).y + value);
+    (*output).z = (unsigned char) truncate((*input).z + value);
+}
+
+__global__ void brightness(uchar3 *input, uchar3 *output, int w, int h, int value) {
+    int x = threadIdx.x + blockIdx.x * blockDim.x;
+    int y = threadIdx.y + blockIdx.y * blockDim.y;
+    if (y >= h ||  x >= w) return;
+
+    map_brightness(&input[x + y*w], &output[x + y*w], value);
+}
+
+__device__ void map_blending(uchar3 *input1, uchar3 *input2, uchar3 *output, float valueBlending){
+    (*output).x = (unsigned char) truncate((*input1).x*valueBlending + (*input2).x*(1-valueBlending));
+    (*output).y = (unsigned char) truncate((*input1).y*valueBlending + (*input2).y*(1-valueBlending));
+    (*output).z = (unsigned char) truncate((*input1).z*valueBlending + (*input2).z*(1-valueBlending));
+}
+
+__global__ void blending(uchar3 *input1, uchar3 *input2, uchar3 *output, int w, int h, float valueBlending) {
+    int x = threadIdx.x + blockIdx.x * blockDim.x;
+    int y = threadIdx.y + blockIdx.y * blockDim.y;
+    if (y >= h ||  x >= w) return;
+
+    map_blending(&input1[x + y*w],&input2[x + y*w], &output[x + y*w], valueBlending);
+}
+
+void Labwork::labwork6a_GPU() {
+    int size = 4;
+    int threshold = 130;
+    // Calculate number of pixels
+    int pixelCount = inputImage->width * inputImage->height;
+    outputImage = static_cast<unsigned char *>(malloc(pixelCount * 3));
+    uchar3 *hostInput = (uchar3 *) malloc(pixelCount * sizeof(uchar3));
+    uchar3 *hostGray = (uchar3 *) malloc(pixelCount * sizeof(uchar3));
+    
+    dim3 gridSize = dim3(inputImage->width / size + 1, inputImage->height/size + 1);
+    dim3 blockSize = dim3(size, size);
+
+    // Copy input image into uchar3
+    for (int i = 0; i < pixelCount; i++) {
+        hostInput[i].x = (unsigned char) inputImage->buffer[i * 3];
+        hostInput[i].y = (unsigned char) inputImage->buffer[i * 3 + 1];
+        hostInput[i].z = (unsigned char) inputImage->buffer[i * 3 + 2];
+    }
+    // Allocate CUDA memory  
+    uchar3 *devInput;
+    uchar3 *devGray;
+
+    cudaMalloc(&devInput, pixelCount * sizeof(uchar3));
+    cudaMalloc(&devGray, pixelCount * sizeof(uchar3));
+
+    // Copy CUDA Memory from CPU to GPU
+    cudaMemcpy(devInput, hostInput,
+    pixelCount * sizeof(uchar3),
+    cudaMemcpyHostToDevice);
+
+    // Processing
+    binarization<<<gridSize, blockSize>>>(devInput, devGray, inputImage->width,inputImage->height, threshold);
+
+    // Copy CUDA Memory from GPU to CPU
+    cudaMemcpy(hostGray, devGray,
+        pixelCount * sizeof(uchar3),
+        cudaMemcpyDeviceToHost);
+
+    // Cleaning
+    cudaFree(devInput);
+
+    // Copy uchar3 into output image
+    for (int i = 0; i < pixelCount; i++) {
+        outputImage[i * 3] = (unsigned char) (hostGray[i].x);
+        outputImage[i * 3 + 1] = (unsigned char) (hostGray[i].y);
+        outputImage[i * 3 + 2] = (unsigned char) (hostGray[i].z);
+    }
+}
+
+void Labwork::labwork6b_GPU() {
+    int size = 4;
+    int brightnessValue = 100;
+    // Calculate number of pixels
+    int pixelCount = inputImage->width * inputImage->height;
+    outputImage = static_cast<unsigned char *>(malloc(pixelCount * 3));
+    uchar3 *hostInput = (uchar3 *) malloc(pixelCount * sizeof(uchar3));
+    uchar3 *hostGray = (uchar3 *) malloc(pixelCount * sizeof(uchar3));
+    
+    dim3 gridSize = dim3(inputImage->width / size + 1, inputImage->height/size + 1);
+    dim3 blockSize = dim3(size, size);
+
+    // Copy input image into uchar3
+    for (int i = 0; i < pixelCount; i++) {
+        hostInput[i].x = (unsigned char) inputImage->buffer[i * 3];
+        hostInput[i].y = (unsigned char) inputImage->buffer[i * 3 + 1];
+        hostInput[i].z = (unsigned char) inputImage->buffer[i * 3 + 2];
+    }
+    // Allocate CUDA memory  
+    uchar3 *devInput;
+    uchar3 *devGray;
+
+    cudaMalloc(&devInput, pixelCount * sizeof(uchar3));
+    cudaMalloc(&devGray, pixelCount * sizeof(uchar3));
+
+    // Copy CUDA Memory from CPU to GPU
+    cudaMemcpy(devInput, hostInput,
+    pixelCount * sizeof(uchar3),
+    cudaMemcpyHostToDevice);
+
+    // Processing
+    brightness<<<gridSize, blockSize>>>(devInput, devGray, inputImage->width,inputImage->height, brightnessValue);
+
+    // Copy CUDA Memory from GPU to CPU
+    cudaMemcpy(hostGray, devGray,
+        pixelCount * sizeof(uchar3),
+        cudaMemcpyDeviceToHost);
+
+    // Cleaning
+    cudaFree(devInput);
+
+    // Copy uchar3 into output image
+    for (int i = 0; i < pixelCount; i++) {
+        outputImage[i * 3] = (unsigned char) (hostGray[i].x);
+        outputImage[i * 3 + 1] = (unsigned char) (hostGray[i].y);
+        outputImage[i * 3 + 2] = (unsigned char) (hostGray[i].z);
+    }
+}
+
+void Labwork::labwork6c_GPU() {
+    int size = 4;
+    float valueBlending = 0.2;
+    // Calculate number of pixels
+    int pixelCount = inputImage->width * inputImage->height;
+    outputImage = static_cast<unsigned char *>(malloc(pixelCount * 3));
+    uchar3 *hostInput = (uchar3 *) malloc(pixelCount * sizeof(uchar3));
+    uchar3 *hostGray = (uchar3 *) malloc(pixelCount * sizeof(uchar3));
+    
+    dim3 gridSize = dim3(inputImage->width / size + 1, inputImage->height/size + 1);
+    dim3 blockSize = dim3(size, size);
+
+    // Copy input image into uchar3
+    for (int i = 0; i < pixelCount; i++) {
+        hostInput[i].x = (unsigned char) inputImage->buffer[i * 3];
+        hostInput[i].y = (unsigned char) inputImage->buffer[i * 3 + 1];
+        hostInput[i].z = (unsigned char) inputImage->buffer[i * 3 + 2];
+    }
+    // Allocate CUDA memory  
+    uchar3 *devInput;
+    uchar3 *devGray;
+
+    cudaMalloc(&devInput, pixelCount * sizeof(uchar3));
+    cudaMalloc(&devGray, pixelCount * sizeof(uchar3));
+
+    // Copy CUDA Memory from CPU to GPU
+    cudaMemcpy(devInput, hostInput,
+    pixelCount * sizeof(uchar3),
+    cudaMemcpyHostToDevice);
+
+    // Processing
+    blending<<<gridSize, blockSize>>>(devInput, devInput,devGray, inputImage->width,inputImage->height, valueBlending);
+
+    // Copy CUDA Memory from GPU to CPU
+    cudaMemcpy(hostGray, devGray,
+        pixelCount * sizeof(uchar3),
+        cudaMemcpyDeviceToHost);
+
+    // Cleaning
+    cudaFree(devInput);
+
+    // Copy uchar3 into output image
+    for (int i = 0; i < pixelCount; i++) {
+        outputImage[i * 3] = (unsigned char) (hostGray[i].x);
+        outputImage[i * 3 + 1] = (unsigned char) (hostGray[i].y);
+        outputImage[i * 3 + 2] = (unsigned char) (hostGray[i].z);
+    }
+}
+
 
 void Labwork::labwork7_GPU() {
 }
